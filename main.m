@@ -1,21 +1,41 @@
 %% load
-if ~ exist('features', 'var')
-    features = load('../From_zhishuai/res_info.mat');
-end
-if ~ exist('centers', 'var')
-    centers = load('../From_zhishuai/dictionary_imagenet_car_vgg16_pool4_K176_norm_nowarp_prune_512.mat');
+% if ~ exist('features', 'var')
+%     features = load('../From_zhishuai/res_info.mat');
+% end
+% if ~ exist('centers', 'var')
+%     centers = load('../From_zhishuai/dictionary_imagenet_car_vgg16_pool4_K176_norm_nowarp_prune_512.mat');
+% end
+SP_index = 1;
+instance = 0;
+if ~ exist('data_oneSP', 'var')
+    file_list = dir('../From_zhishuai/spFeat/*.mat');
+    data = cell(length(file_list), 1);
+    for l = 1:length(file_list)
+        data{l} = load(['../From_zhishuai/spFeat/', file_list(l).name]);
+        instance = instance + length(data{l}.featSP{SP_index});
+    end
+    data_oneSP = cell(instance, 1); index = 1;
+    for l = 1:length(data)
+        for I = 1:length(data{l}.featSP{SP_index})
+            data_oneSP{index} = data{l}.featSP{SP_index}{I};
+            index = index + 1;
+        end
+    end
+    clear file_list;
+    clear data;
 end
 
 %% constants
-const_h = 5;
-const_w = 5;
-% const_c = size(centers, 2);
+const_h = 7;
+const_w = 7;
 channel = [1, 9, 16, 22, 25];
+% channel = [1, 9];
 const_c = length(channel);
+% channel = 1; const_c = 1;
 
 visible = const_h * const_w * const_c;
 hidden = visible;
-% hidden = 1;
+hidden = 1;
 
 const_iteration = 100000;
 const_samples = 100;
@@ -28,22 +48,25 @@ const_cd_1 = 3;
 const_cd_2 = 5;
 
 learning_rate = 1e0;
-half_life_iteration = 1e-1 * const_iteration;
+half_life_iteration = 1e-2 * const_iteration;
 print_iteration = 10;
 
-type = 4;
+type = 5;
+% type = 4;
+SP = 1;
+
 MFCD = 1;
 w12 = 1e0;
 bias = 0.0;
 disp_scale = 10;
 
-delta_free_energy = zeros(1, const_iteration);
+% delta_free_energy = zeros(1, const_iteration);
 figure;
 
 %% matrix init
 
-% matrix = randn(visible + hidden + 1, visible + hidden + 1) * 1;
-% matrix = 0.5 * matrix + 0.5 * matrix'; % symmetry
+matrix = randn(visible + hidden + 1, visible + hidden + 1) * 1;
+matrix = 0.5 * matrix + 0.5 * matrix'; % symmetry
 
 mask = ones(visible + hidden + 1, visible + hidden + 1);
 for temp = 1:visible + hidden + 1
@@ -73,8 +96,12 @@ elseif type == 4 && hidden == visible % Type 4: Wenhao
     matrix(visible + 1: visible + hidden, 1: hidden) = eye(hidden) * w12;
     mask(visible + 1: visible + hidden, 1: hidden) = zeros(hidden);
     % matrix(visible + 1: visible + hidden, visible + 1: visible + hidden) = matrix_init;
+elseif type == 5 % nothing but bias
+    matrix(1: visible + hidden, 1:visible + hidden) = 0;
+    mask(1: visible + hidden, 1:visible + hidden) = 0;
+    matrix(visible + 1: visible + hidden, 1:visible + hidden + 1) = 0;
+    mask(visible + 1: visible + hidden, 1:visible + hidden + 1) = 0;
 end
-
 
 %% for loop
 v_indices = 1:visible;
@@ -94,26 +121,36 @@ mhnt = double(randn(hidden, const_samples) < 0.1);
 for iteration = 1:const_iteration
 %% prepare mini-batch data
     for index = 1:const_samples
-        % img_idx = randi(length(features.res_info));
-        img_idx = randi(1000);
-        % img_idx = 1;
-        % disp(img_idx);
-        feature = features.res_info{img_idx}.layer_feature_ori;
-        dist = features.res_info{img_idx}.layer_feature_dist;
-        [height, width, ~] = size(dist);
-        % imshow(dist(1:h, 1:w, 1));
+        if SP == 1
+            img_idx = randi(length(data_oneSP));
+            dist = data_oneSP{img_idx};
+            [height, width, ~] = size(dist);
+            top = randi(height - const_h + 1);
+            left = randi(width - const_w + 1);
+            crop = dist( top: top + const_h - 1, left: left + const_w - 1, channel );
+            input_tensor = double(crop < 1);
+            vn(1:visible, index) = reshape(input_tensor, visible, 1);
+        else
+            img_idx = randi(length(features.res_info));
+            % img_idx = 1;
+            % disp(img_idx);
+            feature = features.res_info{img_idx}.layer_feature_ori;
+            dist = features.res_info{img_idx}.layer_feature_dist;
+            [height, width, ~] = size(dist);
+            % imshow(dist(1:h, 1:w, 1));
 
-        top = randi(height - const_h + 1);
-        left = randi(width - const_w + 1);
-%         top = height - const_h + 1;
-%         left = round((width - const_w + 2) / 2);
-        crop = dist( top: top + const_h - 1, left: left + const_w - 1, channel );
+            top = randi(height - const_h + 1);
+            left = randi(width - const_w + 1);
+    %         top = height - const_h + 1;
+    %         left = round((width - const_w + 2) / 2);
+            crop = dist( top: top + const_h - 1, left: left + const_w - 1, channel );
 
-        % input_tensor = 2 ./ (1 + exp(crop)); % non linear
-        % input_tensor = 1 - 0.5 .* crop; % linear
-        input_tensor = double(crop < 1); % threshold to binary
-        % distance to probability function to explore (generate spikes)
-        vn(1:visible, index) = reshape(input_tensor, visible, 1);
+            % input_tensor = 2 ./ (1 + exp(crop)); % non linear
+            % input_tensor = 1 - 0.5 .* crop; % linear
+            input_tensor = double(crop < 1); % threshold to binary
+            % distance to probability function to explore (generate spikes)
+            vn(1:visible, index) = reshape(input_tensor, visible, 1);
+        end
     end
 
     if ~MFCD
