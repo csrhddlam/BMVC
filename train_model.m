@@ -1,5 +1,4 @@
 
-
 v_indices = 1:visible;
 h_indices = visible + 1 : visible + hidden;
 vh_indices = [v_indices, h_indices];

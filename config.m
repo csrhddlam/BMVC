@@ -1,6 +1,6 @@
 %% constants
-label_train = 23;
-label_val = 39;
+label_train = 1;
+label_val = 1:39;
 
 const_h = 7;
 const_w = 7;

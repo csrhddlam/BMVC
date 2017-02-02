@@ -1,4 +1,4 @@
-SP_indices = [label_train, label_val];
+SP_all = 1:39;
 train_sample = 0.6;
 val_sample = 0.2;
 test_sample = 0.2;
@@ -17,7 +17,7 @@ if ~ exist('data_all', 'var')
     data_raw = cell(length(file_list), 1);
     for f = 1:length(file_list)
         data_raw{f} = load(['../From_zhishuai/spFeat/', file_list(f).name]);
-        for SP_index = SP_indices
+        for SP_index = SP_all
             length_all = length_all + length(data_raw{f}.featSP{SP_index});
         end
     end
@@ -27,7 +27,7 @@ if ~ exist('data_all', 'var')
     partition_all = zeros(length_all, 1);
     
     for f = 1:length(data_raw)
-        for SP_index = SP_indices
+        for SP_index = SP_all
             for instance = 1:length(data_raw{f}.featSP{SP_index})
                 data_all{index} = data_raw{f}.featSP{SP_index}{instance};
                 label_all(index) = SP_index;
