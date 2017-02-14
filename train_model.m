@@ -2,6 +2,10 @@
 v_indices = 1:visible;
 h_indices = visible + 1 : visible + hidden;
 vh_indices = [v_indices, h_indices];
+training_indices = find((partition_all == 1) .* (label_all == label_train));
+validation_indices = find((partition_all == 2) .* (label_all == label_train));
+cheat_indices = find(label_all ~= label_train);
+cheat_indices = datasample(cheat_indices, const_samples);
 
 positive_vhbs = double(randn(visible + hidden + 1, const_samples) < 0.1);
 positive_vhbs(visible + hidden + 1, :) = 1;
@@ -9,39 +13,33 @@ positive_vhbs(visible + hidden + 1, :) = 1;
 negative_vhbs = double(randn(visible + hidden + 1, const_samples) < 0.1);
 negative_vhbs(visible + hidden + 1, :) = 1;
 
-vn = gpuArray(single(randn(visible, const_samples) < 0.1));
-% mvn = double(randn(visible, const_samples) < 0.1);
-% mhnt = double(randn(hidden, const_samples) < 0.1);
+persistent_samples = randn(visible + hidden, const_samples);
 
-train_indices = find((partition_all == 1) .* (label_all == label_train));
+gradient_history = zeros(1, const_iteration / print_iteration);
+training_free_energy_history = zeros(1, const_iteration / print_iteration);
+validation_free_energy_history = zeros(1, const_iteration / print_iteration);
+cheat_free_energy_history = zeros(1, const_iteration / print_iteration);
+history_i = 1;
+
+training_data = gpuArray(single(zeros(length(training_indices), visible)));
+validation_data = gpuArray(single(zeros(length(validation_indices), visible)));
+cheat_data = gpuArray(single(zeros(length(cheat_indices), visible)));
+%% prepare training data
+for index = 1:length(training_indices)
+    train_index = training_indices(index);
+    training_data(index, :) = get_data_from_index(data_all, train_index, const_h, const_w, channels)';
+end
+for index = 1:length(validation_indices)
+    val_index = validation_indices(index);
+    validation_data(index, :) = get_data_from_index(data_all, val_index, const_h, const_w, channels)';
+end
+for index = 1:length(cheat_indices)
+    cheat_index = cheat_indices(index);
+    cheat_data(index, :) = get_data_from_index(data_all, cheat_index, const_h, const_w, channels)';
+end
 for iteration = 1:const_iteration
 %% prepare mini-batch data
-    for index = 1:const_samples
-        if SPdata == 1
-            train_index = train_indices(randi(length(train_indices)));
-            vn(1:visible, index) = get_data_from_index(data_all, train_index, const_h, const_w, channels);
-        else
-            img_idx = randi(length(features.res_info));
-            % img_idx = 1;
-            % disp(img_idx);
-            % feature = features.res_info{img_idx}.layer_feature_ori;
-            dist = features.res_info{img_idx}.layer_feature_dist;
-            [height, width, ~] = size(dist);
-            % imshow(dist(1:h, 1:w, 1));
-
-            top = randi(height - const_h + 1);
-            left = randi(width - const_w + 1);
-    %         top = height - const_h + 1;
-    %         left = round((width - const_w + 2) / 2);
-            crop = dist( top: top + const_h - 1, left: left + const_w - 1, channel );
-
-            % input_tensor = 2 ./ (1 + exp(crop)); % non linear
-            % input_tensor = 1 - 0.5 .* crop; % linear
-            input_tensor = double(crop < 1); % threshold to binary
-            % distance to probability function to explore (generate spikes)
-            vn(1:visible, index) = reshape(input_tensor, visible, 1);
-        end
-    end
+    vn = datasample(training_data, const_samples, 'Replace', false)';
 
     if method == 1
     %% positive gibbs
@@ -73,7 +71,7 @@ for iteration = 1:const_iteration
 %         free_energy_negative = -log(mean(exp(-energy_negative)));
         dmatrix = dmatrix_positive - dmatrix_negative;
         % delta_free_energy(iteration) = free_energy_positive - free_energy_negative;
-    else
+    elseif method == 2
     %% contrastive divergence mean field
         
         mhn = gpuArray(single(ones(hidden, const_samples) * 0.5));
@@ -104,24 +102,57 @@ for iteration = 1:const_iteration
         dW = (mhn * mhn' - mhnt * mhnt') / const_samples;
         dV = (vn * vn' - mvn * mvn') / const_samples;
         dJ = (vn * mhnt' - mvn * mhnt') / const_samples;
-        dBv = mean(vn - mvn, 2);
-        dBh = mean(mhn - mhnt, 2);
+        dBv = mean(vn - mvn, 2) ;
+        dBh = mean(mhn - mhnt, 2) ;
         
         dmatrix = [dV, dJ, dBv; dJ', dW, dBh; dBv', dBh', 0];
+    elseif method == 3
+        
     end
 %% updates
-    temp_lr = learning_rate * half_life_iteration / (half_life_iteration + iteration);
-    matrix = matrix + temp_lr * dmatrix .* mask;
+    temp_lr = 0.1 ^ floor(iteration / half_life_iteration) * learning_rate;
+    dmatrix = dmatrix .* mask;
+    matrix = matrix + temp_lr * dmatrix;
+    matrix = matrix * weight_decay;
     if mod(iteration, print_iteration) == 0
-        disp(['iteration ', num2str(iteration), ': ', num2str(norm(dmatrix))]);
-        disp(datestr(now));
-        save('matrix.mat','matrix');
-%         disp(['    delta_free_energy :', num2str(delta_free_energy(iteration))]);
-%         disp(['        free_energy_positive :', num2str(free_energy_positive)]);
-%         disp(['        free_energy_negative :', num2str(free_energy_negative)]);
-        %visualize_model(matrix, visible, hidden, const_h, fig1, fig2, fig3, disp_scale);
-        %figure(fig3);
-%         plot(delta_free_energy);
+%         visualize_model(matrix, visible, hidden, const_h, fig1, fig2, fig3, disp_scale);
+        %% all visible case free energy over all training data
+        if type == 2
+            training_free_energies = zeros(length(training_indices), 1);
+            for index = 1:length(training_indices)
+                training_free_energies(index) = gather(-training_data(index, :) * matrix(1:visible, :) * [training_data(index, :), 0, 1]');
+            end
+            training_free_energy = mean(training_free_energies)
+            
+            validation_free_energies = zeros(length(validation_indices), 1);
+            for index = 1:length(validation_indices)
+                validation_free_energies(index) = gather(-validation_data(index, :) * matrix(1:visible, :) * [validation_data(index, :), 0, 1]');
+            end
+            validation_free_energy = mean(validation_free_energies)
+            
+            cheat_free_energies = zeros(length(cheat_indices), 1);
+            for index = 1:length(cheat_indices)
+                cheat_free_energies(index) = gather(-cheat_data(index, :) * matrix(1:visible, :) * [cheat_data(index, :), 0, 1]');
+            end
+            cheat_free_energy = mean(cheat_free_energies)
+        end
+        
+        matrix_sum = gather(sum(sum(abs(dmatrix))));
+        matrix_max = gather(max(max(abs(dmatrix))));
+        disp([datestr(now), ' iteration ', num2str(iteration), ', learning_rate ', num2str(temp_lr), ', gradient_sum ', num2str(matrix_sum), ', gradient_max ', num2str(matrix_max)]);
+        disp(['training ', num2str(training_free_energy), ', validation ', num2str(validation_free_energy), ', cheat ', num2str(cheat_free_energy)]);
+
+        save(['matrix_', num2str(label_train),'_lr_', num2str(learning_rate),'_mom_', num2str(momentum),'.mat'],'matrix');
+        
+        gradient_history(history_i) = log10(max(matrix_sum, 0.0000001));
+        training_free_energy_history(history_i) = training_free_energy;
+        validation_free_energy_history(history_i) = validation_free_energy;
+        cheat_free_energy_history(history_i) = cheat_free_energy;
+        history_i = history_i + 1;
+        % figure(fig_history);
+        plot([training_free_energy_history;validation_free_energy_history;cheat_free_energy_history]');
+        legend('training', 'validation', 'cheat'); drawnow;
+%         plot(gradient_history); drawnow;
     end
 %% compute distance
 %     distance = zeros(h,w,const_c);

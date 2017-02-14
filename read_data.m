@@ -13,10 +13,10 @@ length_all = 0;
 % end
 
 if ~ exist('data_all', 'var')
-    file_list = dir('../From_zhishuai/spFeat/*.mat');
+    file_list = dir('../From_zhishuai/spFeat_train/*.mat');
     data_raw = cell(length(file_list), 1);
     for f = 1:length(file_list)
-        data_raw{f} = load(['../From_zhishuai/spFeat/', file_list(f).name]);
+        data_raw{f} = load(['../From_zhishuai/spFeat_train/', file_list(f).name]);
         for SP_index = SP_all
             length_all = length_all + length(data_raw{f}.featSP{SP_index});
         end

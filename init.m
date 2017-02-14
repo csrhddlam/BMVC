@@ -1,14 +1,15 @@
 % delta_free_energy = zeros(1, const_iteration);
-fig1 = figure;
-fig2 = figure;
-fig3 = figure;
+fig_history = figure;
+% fig1 = figure;
+% fig2 = figure;
+% fig3 = figure;
 
 %% matrix init
 
-matrix = randn(visible + hidden + 1, visible + hidden + 1) * 1;
+matrix = randn(visible + hidden + 1, visible + hidden + 1) * init_var;
 matrix = 0.5 * matrix + 0.5 * matrix'; % symmetry
 
-mask = ones(visible + hidden + 1, visible + hidden + 1);
+mask = true(visible + hidden + 1, visible + hidden + 1);
 for temp = 1:visible + hidden + 1
     matrix(temp, temp) = 0;
     mask(temp, temp) = 0;
@@ -43,5 +44,9 @@ elseif type == 5 % nothing but bias
     mask(visible + 1: visible + hidden, 1:visible + hidden + 1) = 0;
 end
 
+% load('distance_mask.mat');
+% mask(1:visible,1:visible) = reshape(distance_mask(7,:,:),visible, visible) .* mask(1:visible,1:visible);
+% matrix = matrix .* mask;
+
 matrix = gpuArray(single(matrix));
-mask = gpuArray(single(mask));
+mask = gpuArray(mask);
