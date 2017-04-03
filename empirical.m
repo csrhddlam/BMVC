@@ -1,4 +1,4 @@
-label_counting = 1;
+label_counting = 23;
 indices = find((partition_all == 1) .* (label_all == label_counting));
 
 counting = ones(visible, 1);
@@ -15,7 +15,7 @@ matrix(visible+hidden+1, 1:visible) = w_counting;
 matrix(1:visible, 1+visible+hidden) = w_counting;
 matrix = max(matrix, -10);
 matrix = gpuArray(single(matrix));
-save(['matrix_', num2str(label_counting),'_counting.mat'],'matrix');
+save(['matrix_', num2str(label_counting),'_counting_test.mat'],'matrix');
 a = 0;
 
 figure;

@@ -1,4 +1,4 @@
-label_eval = 1;
+label_eval = 23;
 probes = cell(3, 1);
 
 probes{1} = find((partition_all == 1) .* (label_all == label_eval));
