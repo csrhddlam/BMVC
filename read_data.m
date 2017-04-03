@@ -4,7 +4,7 @@ val_sample = 0.2;
 test_sample = 0.2;
 
 length_all = 0;
-
+training_dir = '../From_zhishuai/spFeat_train/';
 % if ~ exist('features', 'var')
 %     features = load('../From_zhishuai/res_info.mat');
 % end
@@ -13,10 +13,10 @@ length_all = 0;
 % end
 
 if ~ exist('data_all', 'var')
-    file_list = dir('../From_zhishuai/spFeat_train/*.mat');
+    file_list = dir([training_dir,'*.mat']);
     data_raw = cell(length(file_list), 1);
     for f = 1:length(file_list)
-        data_raw{f} = load(['../From_zhishuai/spFeat_train/', file_list(f).name]);
+        data_raw{f} = load([training_dir, file_list(f).name]);
         for SP_index = SP_all
             length_all = length_all + length(data_raw{f}.featSP{SP_index});
         end

@@ -1,7 +1,7 @@
 % delta_free_energy = zeros(1, const_iteration);
-fig_history = figure;
+% fig_history = figure;
 % fig1 = figure;
-% fig2 = figure;
+% fig2 = figuremat_constents
 % fig3 = figure;
 
 %% matrix init
@@ -32,9 +32,9 @@ elseif type == 3 % Type 3: Restricted BM
 elseif type == 4 && hidden == visible % Type 4: Wenhao
     matrix(1:visible,1:visible) = 0;
     mask(1:visible,1:visible) = 0;
-    matrix(1: hidden, visible + 1: visible + hidden) = eye(hidden) * w12;
+    matrix(1: hidden, visible + 1: visible + hidden) = eye(hidden) * fix_w12;
     mask(1: hidden, visible + 1: visible + hidden) = zeros(hidden);
-    matrix(visible + 1: visible + hidden, 1: hidden) = eye(hidden) * w12;
+    matrix(visible + 1: visible + hidden, 1: hidden) = eye(hidden) * fix_w12;
     mask(visible + 1: visible + hidden, 1: hidden) = zeros(hidden);
     % matrix(visible + 1: visible + hidden, visible + 1: visible + hidden) = matrix_init;
 elseif type == 5 % nothing but bias
